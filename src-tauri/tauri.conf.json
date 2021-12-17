@@ -1,6 +1,6 @@
 {
   "package": {
-    "productName": "drosse-ui",
+    "productName": "Drosse UI",
     "version": "0.1.0"
   },
   "build": {
@@ -54,8 +54,7 @@
     "windows": [
       {
         "title": "Drosse UI",
-        "width": 800,
-        "height": 600,
+        "maximized": true,
         "resizable": true,
         "fullscreen": false
       }
