@@ -45,7 +45,7 @@ export default function useIo() {
 
   const importFolder = path => invoke(commands.import, { path })
   const openFile = (uuid, file) => invoke(commands.open, { uuid, file })
-  const saveDrosses = drosses => invoke(commands.save, { ...drosses })
+  const saveDrosses = drosses => invoke(commands.save, { drosses })
   const start = uuid => invoke(commands.start, { uuid })
   const stop = uuid => invoke(commands.stop, { uuid })
 
