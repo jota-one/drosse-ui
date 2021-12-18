@@ -44,6 +44,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "home",
+ "open",
  "serde",
  "serde_json",
  "socket2 0.3.19",

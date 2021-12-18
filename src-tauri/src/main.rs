@@ -3,8 +3,10 @@
   windows_subsystem = "windows"
 )]
 
+mod discover;
 use chrono::Utc;
 use home::home_dir;
+use open::that_in_background;
 use serde_json::{
   json,
   Value
@@ -16,7 +18,9 @@ use std::{
   thread
 };
 use tauri::Window;
-mod discover;
+
+const PREF_FOLDER: &str = ".drosse-ui";
+const DROSSES_FILE: &str = "drosses.json";
 
 #[derive(Clone, serde::Serialize)]
 struct Payload {
@@ -80,14 +84,14 @@ fn init_discover(window: Window) {
 
 #[tauri::command]
 fn list() -> Value {
-  let drosses_file = Path::new(&home_dir().unwrap()).join(".drosse-ui").join("drosses.json");
-  let json = fs::read_to_string(drosses_file).unwrap();
-  return serde_json::from_str(&json).unwrap();
+  get_drosses()
 }
 
 #[tauri::command]
-fn file(uuid: String, file: String) {
-  println!("file {:?} {:?}", uuid, file);
+fn file(uuid: String, file: String) -> Value {
+  let root = get_drosse_root_path(uuid);
+  let content = fs::read_to_string(root).unwrap();
+  serde_json::from_str(&["{content:\"", &content, "\"}"].join("")).unwrap()
 }
 
 #[tauri::command]
@@ -97,12 +101,21 @@ fn import(path: String) {
 
 #[tauri::command]
 fn open(uuid: String, file: String) {
-  println!("open {:?} {:?}", uuid, file);
+  let root = get_drosse_root_path(uuid);
+  let file_path = Path::new(&root).join(file);
+  
+  that_in_background(file_path).join()
+    .expect("Could not open file");
+}
+
+#[tauri::command]
+fn restart(uuid: String) {
+  println!("restart {:?}", uuid);
 }
 
 #[tauri::command]
 fn save(drosses: Value) {
-  println!("save {:?}", drosses);
+  write_drosses(drosses)
 }
 
 #[tauri::command]
@@ -124,10 +137,45 @@ fn main() {
       file,
       import,
       open,
+      restart,
       save,
       start,
       stop
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+fn get_drosse_root_path(uuid: String) -> String {
+  let drosses = get_drosses();
+  
+  let root: &str = drosses[&uuid]["root"].as_str()
+    .expect("Could not find root path");
+  
+  root.to_string()
+}
+
+fn get_drosses_file_path() -> String {
+  Path::new(&home_dir().unwrap())
+    .join(PREF_FOLDER)
+    .join("drosses.json")
+    .display().to_string()
+}
+
+fn get_drosses() -> Value {
+  let drosses_file_path = get_drosses_file_path();
+  let json = fs::read_to_string(drosses_file_path).unwrap();
+  serde_json::from_str(&json).unwrap()
+}
+
+fn write_drosses(drosses: Value) {
+  let drosses_file_path = get_drosses_file_path();
+  let file = std::fs::OpenOptions::new()
+    .create(true)
+    .write(true)
+    .truncate(true)
+    .open(drosses_file_path)
+    .unwrap();
+  
+  serde_json::to_writer(&file, &drosses);
 }
