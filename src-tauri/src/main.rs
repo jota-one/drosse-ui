@@ -7,11 +7,13 @@ mod discover;
 use chrono::Utc;
 use home::home_dir;
 use open::that_in_background;
+use serde::{Serialize, Deserialize};
 use serde_json::{
   json,
   Value
 };
 use std::{
+  collections::HashMap,
   fs,
   path::Path,
   sync::mpsc,
@@ -21,8 +23,28 @@ use tauri::Window;
 
 const PREF_FOLDER: &str = ".drosse-ui";
 const DROSSES_FILE: &str = "drosses.json";
+const DROSSE_CONFIG_FILE: &str = ".drosserc.js";
+const DROSSE_UUID_FILE: &str = ".uuid";
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
+struct Drosse {
+  available: Option<bool>,
+  collectionsPath: String,
+  hosts: Vec<String>,
+  lastSeen: String,
+  name: String,
+  open: bool,
+  port: u32,
+  proto: String,
+  root: String,
+  routes: Option<Vec<Value>>,
+  routesFile: String,
+  selected: bool,
+  uuid: String,
+  version: String
+}
+
+#[derive(Clone, Serialize)]
 struct Payload {
   message: String,
 }
@@ -35,7 +57,7 @@ fn browse(dir: String) -> Vec<Value> {
       let dir_path = e.unwrap().path().display().to_string();
       json!({
         "path": dir_path,
-        "selectable": Path::new(&dir_path).join(".drosserc.js").exists()
+        "selectable": Path::new(&dir_path).join(DROSSE_CONFIG_FILE).exists()
       })
     })
     .collect();
@@ -83,13 +105,14 @@ fn init_discover(window: Window) {
 }
 
 #[tauri::command]
-fn list() -> Value {
+fn list() -> HashMap<String, Drosse> {
   get_drosses()
 }
 
 #[tauri::command]
 fn file(uuid: String, file: String) -> Value {
-  let root = get_drosse_root_path(uuid);
+  let drosses = get_drosses();
+  let root = get_drosse_root_path(&drosses, &uuid);
   let content = fs::read_to_string(root).unwrap();
   serde_json::from_str(&["{content:\"", &content, "\"}"].join("")).unwrap()
 }
@@ -101,7 +124,8 @@ fn import(path: String) {
 
 #[tauri::command]
 fn open(uuid: String, file: String) {
-  let root = get_drosse_root_path(uuid);
+  let drosses = get_drosses();
+  let root = get_drosse_root_path(&drosses, &uuid);
   let file_path = Path::new(&root).join(file);
   
   that_in_background(file_path).join()
@@ -114,7 +138,7 @@ fn restart(uuid: String) {
 }
 
 #[tauri::command]
-fn save(drosses: Value) {
+fn save(drosses: HashMap<String, Drosse>) {
   write_drosses(drosses)
 }
 
@@ -146,29 +170,38 @@ fn main() {
     .expect("error while running tauri application");
 }
 
-fn get_drosse_root_path(uuid: String) -> String {
-  let drosses = get_drosses();
-  
-  let root: &str = drosses[&uuid]["root"].as_str()
-    .expect("Could not find root path");
-  
-  root.to_string()
+fn get_drosse_root_path(drosses: &HashMap<String, Drosse>, uuid: &String) -> String {
+  let drosse = drosses.get(uuid).expect("Could not get drosse");
+  drosse.root.to_string()
 }
 
 fn get_drosses_file_path() -> String {
   Path::new(&home_dir().unwrap())
     .join(PREF_FOLDER)
-    .join("drosses.json")
+    .join(DROSSES_FILE)
     .display().to_string()
 }
 
-fn get_drosses() -> Value {
+fn get_drosses() -> HashMap<String, Drosse> {
   let drosses_file_path = get_drosses_file_path();
-  let json = fs::read_to_string(drosses_file_path).unwrap();
-  serde_json::from_str(&json).unwrap()
+  let content = fs::read_to_string(drosses_file_path).unwrap();
+  
+  let mut drosses: HashMap<String, Drosse> = serde_json::from_str(&content).unwrap();
+
+  let uuids: Vec<String> = drosses.keys().cloned().collect();
+  
+  for uuid in uuids {
+    let drosse = drosses.get(&uuid).unwrap();
+    let is_available = Path::new(&drosse.root).join(DROSSE_CONFIG_FILE).exists();
+    drosses.entry(uuid).and_modify(|drosse| {
+      drosse.available = Some(is_available);
+    });
+  }
+
+  drosses
 }
 
-fn write_drosses(drosses: Value) {
+fn write_drosses(drosses: HashMap<String, Drosse>) {
   let drosses_file_path = get_drosses_file_path();
   let file = std::fs::OpenOptions::new()
     .create(true)
@@ -176,6 +209,9 @@ fn write_drosses(drosses: Value) {
     .truncate(true)
     .open(drosses_file_path)
     .unwrap();
-  
-  serde_json::to_writer(&file, &drosses);
+
+  match serde_json::to_writer(&file, &drosses) {
+    Ok(v) => println!("Drosses saved!"),
+    Err(e) => println!("Error writing drosses: {}", e)
+  };
 }
