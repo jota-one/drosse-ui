@@ -10,9 +10,9 @@ module.exports = {
     stop: 'stop',
   },
   events: {
-    up: 'up',
-    down: 'down',
-    request: 'request',
-    log: 'log'
+    up: 'drosse.up',
+    down: 'drosse.down',
+    request: 'drosse.request',
+    log: 'drosse.log'
   }
 }
