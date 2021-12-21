@@ -68,31 +68,29 @@ fn browse(dir: String) -> Vec<Value> {
 #[tauri::command]
 fn init_discover(window: Window) {
   println!("init_discover on window {:?}", window.label());
-  let (tx, rx) = mpsc::channel::<discover::LiveInstanceEvent>();
-  discover::listen(tx);
+  let discover = discover::Discover::new();
+
+  let (tx, rx) = mpsc::channel::<discover::DiscoverEvent>();
+  discover.listen(tx);
   thread::spawn(move || {
     for received in rx {
       match received.event {
-        discover::InstanceEvent::Down => window.emit("awesome", Payload {
+        discover::InstanceEvent::Down => window.emit("drosse.down", Payload {
           message: format!(
             "=> notify FE -> {}:down",
             received.uuid
           )
         }).unwrap(),
-        discover::InstanceEvent::Log => window.emit("awesome", Payload {
+        discover::InstanceEvent::Log => window.emit("drosse.log", Payload {
           message: format!(
             "=> notify FE -> {}:{:?}",
             received.uuid,
             received.data
           )
         }).unwrap(),
-        discover::InstanceEvent::Unknown => window.emit("awesome", Payload {
-          message: format!(
-            "=> unknown event... {:?}",
-            received.data
-          )
-        }).unwrap(),
-        discover::InstanceEvent::Up => window.emit("awesome", Payload {
+        discover::InstanceEvent::Unknown =>
+          println!("=> unknown event... {:?}", received.data),
+        discover::InstanceEvent::Up => window.emit("drosse.up", Payload {
           message: format!(
             "=> update live instances -> {}:{}",
             received.uuid,
